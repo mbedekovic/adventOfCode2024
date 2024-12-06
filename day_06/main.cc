@@ -8,6 +8,7 @@
 #include <utility>
 #include <functional>
 #include <map>
+#include <future>
 
 using Map = std::vector<std::string>;
 
@@ -154,23 +155,36 @@ bool loopDetector(Map const& map, Point point, Direction direction, std::map<Poi
 
 size_t countInfiniteLoops(Map map, Point start, Direction direction)
 {
+    std::vector<std::future<size_t>> tasks;
     size_t cnt = 0;
+    size_t i = 0;
     for (auto& row : map)
     {
-        for (auto& field  : row)
-        {
-            if (field != '#' && field != '^')
+        // launch parallel tasks for each line of the map
+        tasks.push_back(std::async(std::launch::async,
+        [start, direction](Map map, size_t i) -> size_t {
+            auto& row = map.at(i);
+            size_t count = 0;
+            for (auto& field  : row)
             {
-                std::map<Point, size_t> visited;
-                // place obstacle and try looping
-                field = '#';
-                cnt += loopDetector(map, start, direction, visited);
-                // reset
-                field = '.';
+                if (field != '#' && field != '^')
+                {
+                    std::map<Point, size_t> visited;
+                    // place obstacle and try looping
+                    field = '#';
+                    count += loopDetector(map, start, direction, visited);
+                    // reset
+                    field = '.';
 
+                }
             }
-        }
+            return count;
+        }, map, i));
+        i++;
     }
+
+    // Sum the returning values of all tasks once they are done
+    cnt = std::accumulate(tasks.begin(), tasks.end(), 0, [](size_t sum, std::future<size_t>& f) { return sum + f.get();});
     return cnt;
 }
 
